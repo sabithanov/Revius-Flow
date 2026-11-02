@@ -1,0 +1,2366 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Revius Flow — Личный финансовый кабинет с голосовым ИИ и календарём</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #080c14;
+      color: #f3f4f6;
+      overflow-x: hidden;
+    }
+    .glass-card {
+      background: rgba(17, 24, 39, 0.88);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-sub {
+      background: rgba(31, 41, 55, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { transform: scale(1.03); box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .recording-pulse {
+      animation: pulse-ring 1.5s infinite;
+    }
+    @keyframes wave-bar {
+      0%, 100% { height: 6px; }
+      50% { height: 22px; }
+    }
+    .wave-bar-1 { animation: wave-bar 0.7s infinite ease-in-out 0.1s; }
+    .wave-bar-2 { animation: wave-bar 0.7s infinite ease-in-out 0.25s; }
+    .wave-bar-3 { animation: wave-bar 0.7s infinite ease-in-out 0.4s; }
+    .wave-bar-4 { animation: wave-bar 0.7s infinite ease-in-out 0.15s; }
+    .wave-bar-5 { animation: wave-bar 0.7s infinite ease-in-out 0.35s; }
+    .privacy-blur {
+      filter: blur(7px);
+      user-select: none;
+      transition: filter 0.2s ease;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #080c14; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 9999px; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+  <!-- Toast Notification -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ================= AUTHENTICATION GATE (REGISTRATION / LOGIN) ================= -->
+  <div id="authOverlay" class="fixed inset-0 z-40 bg-[#070a12] flex items-center justify-center p-4 overflow-y-auto">
+    <div class="absolute -top-24 -left-24 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -right-24 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="glass-card rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-indigo-500/25 relative z-10 my-8">
+      <!-- Brand Header -->
+      <div class="flex flex-col items-center text-center mb-6">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-3">
+          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <h1 class="text-2xl font-extrabold tracking-tight text-white">Revius Flow</h1>
+        <p class="text-xs sm:text-sm text-gray-400 mt-1">Умный учёт финансов с голосовым вводом, календарём и аналитикой</p>
+      </div>
+
+      <!-- Auth Mode Switcher -->
+      <div class="grid grid-cols-2 bg-gray-900/90 p-1 rounded-2xl border border-gray-800 mb-6">
+        <button id="authTabRegisterBtn" type="button" class="py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow">
+          Регистрация
+        </button>
+        <button id="authTabLoginBtn" type="button" class="py-2 rounded-xl text-xs sm:text-sm font-bold transition text-gray-400 hover:text-white">
+          Вход в аккаунт
+        </button>
+      </div>
+
+      <!-- Registration Form -->
+      <form id="registerForm" class="space-y-3.5">
+        <div id="regFeedbackBox" class="hidden p-3 rounded-xl text-xs font-medium border"></div>
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">Ваше имя</label>
+          <input id="regName" type="text" required placeholder="Введите ваше имя" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">Email или логин</label>
+          <input id="regEmail" type="text" required placeholder="name@example.com" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">Пароль</label>
+          <div class="relative">
+            <input id="regPassword" type="password" required minlength="4" placeholder="Минимум 4 символа" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white focus:outline-none" />
+            <button id="toggleRegPassBtn" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-white">👁️</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <div>
+            <label class="block text-xs font-medium text-gray-300 mb-1">Основная валюта</label>
+            <select id="regCurrency" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+              <option value="₸">₸ Тенге (KZT)</option>
+              <option value="₽">₽ Рубль (RUB)</option>
+              <option value="$">$ Доллар (USD)</option>
+              <option value="€">€ Евро (EUR)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-300 mb-1">Месячный бюджет</label>
+            <input id="regBudget" type="number" min="0" placeholder="Напр. 300000" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">Стоимость 1 часа вашей работы <span class="text-gray-500">(необязательно, для ИИ-оценки трат)</span></label>
+          <input id="regHourlyRate" type="number" min="0" placeholder="Напр. 2500" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none" />
+        </div>
+
+        <button type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition mt-2">
+          Создать чистый аккаунт и начать
+        </button>
+      </form>
+
+      <!-- Login Form -->
+      <form id="loginForm" class="hidden space-y-4">
+        <!-- Saved Accounts Quick Picker -->
+        <div id="savedAccountsContainer" class="hidden space-y-2 pb-2 border-b border-gray-800">
+          <label class="block text-[11px] font-semibold uppercase tracking-wider text-indigo-300">Зарегистрированные аккаунты на устройстве:</label>
+          <div id="savedAccountsList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1"></div>
+        </div>
+
+        <div id="authFeedbackBox" class="hidden p-3 rounded-xl text-xs font-medium border"></div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">Ваше имя, Email или логин</label>
+          <input id="loginEmail" type="text" required placeholder="Введите имя или email, указанные при регистрации" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">Пароль</label>
+          <div class="relative">
+            <input id="loginPassword" type="password" required placeholder="Ваш пароль" class="w-full bg-gray-900/90 border border-gray-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white focus:outline-none" />
+            <button id="toggleLoginPassBtn" type="button" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-white">👁️</button>
+          </div>
+        </div>
+        <button type="submit" class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition">
+          Войти в кабинет
+        </button>
+      </form>
+
+      <div class="mt-5 pt-4 border-t border-gray-800/80 text-center">
+        <p class="text-[11px] text-gray-500">
+          🔒 Все ваши финансовые записи надёжно сохраняются локально на вашем устройстве. Никаких чужих примеров — только ваши реальные данные.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TOP NAVIGATION HEADER ================= -->
+  <header class="sticky top-0 z-30 glass-card border-b border-gray-800/80 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand Logo & User Streak -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-indigo-200 to-purple-300 bg-clip-text text-transparent">Revius Flow</span>
+            <span id="streakBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Дней с записями">🔥 Стрик: 0 дн.</span>
+          </div>
+          <p class="text-xs text-gray-400 hidden sm:block">Голосовой и ручной учёт финансов</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center bg-gray-900/90 p-1 rounded-xl border border-gray-800 overflow-x-auto max-w-full">
+        <button id="navTabDashboard" data-tab="dashboard" class="nav-tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-indigo-600 text-white shadow">
+          Кошелёк
+        </button>
+        <button id="navTabCalendar" data-tab="calendar" class="nav-tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-gray-400 hover:text-white">
+          Календарь
+        </button>
+        <button id="navTabAnalytics" data-tab="analytics" class="nav-tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-gray-400 hover:text-white">
+          Графики и ИИ
+        </button>
+        <button id="navTabGoals" data-tab="goals" class="nav-tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-gray-400 hover:text-white">
+          Копилки и Лимиты
+        </button>
+      </nav>
+
+      <!-- User Profile, Privacy Mode, Currency & Settings -->
+      <div class="flex items-center gap-2">
+        <!-- Privacy Blur Toggle (Cool Feature) -->
+        <button id="privacyToggleBtn" type="button" class="p-2 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700/80 text-gray-300 transition text-xs font-semibold" title="Скрыть/показать суммы на экране (режим приватности)">
+          👁️
+        </button>
+
+        <select id="currencySelect" aria-label="Валюта" class="bg-gray-900 border border-gray-700/80 text-gray-200 text-xs sm:text-sm font-semibold rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-500">
+          <option value="₸">₸ KZT</option>
+          <option value="₽">₽ RUB</option>
+          <option value="$">$ USD</option>
+          <option value="€">€ EUR</option>
+        </select>
+
+        <button id="openSettingsBtn" type="button" class="p-2 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-700/80 text-gray-300 transition" title="Настройки бюджета и стоимости часа работы">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>
+
+        <!-- Logged-in User Pill & Logout -->
+        <div class="flex items-center gap-1.5 pl-2 border-l border-gray-800">
+          <span id="userProfileBadge" class="text-xs font-semibold text-indigo-200 bg-indigo-500/15 border border-indigo-500/30 px-2.5 py-1.5 rounded-xl truncate max-w-[110px]">
+            Гость
+          </span>
+          <button id="logoutBtn" type="button" class="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition" title="Выйти из аккаунта">
+            Выйти
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= MAIN CONTENT CONTAINER ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 space-y-6">
+
+    <!-- VOICE, SMART TEXT & RECEIPT SCANNER BAR -->
+    <section class="glass-card rounded-3xl p-4 sm:p-6 shadow-xl relative overflow-hidden border border-indigo-500/20">
+      <div class="absolute -right-12 -top-12 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+              Голосовой и текстовый ИИ-ввод
+            </span>
+            <span id="voiceSupportBadge" class="text-xs text-gray-400">Микрофон RU</span>
+          </div>
+          <h2 class="text-lg sm:text-xl font-bold text-white">Запишите расход или доход голосом, фразой или из банковского СМС</h2>
+        </div>
+
+        <!-- Cool Feature: Bank SMS / Receipt Scanner Button -->
+        <div class="flex items-center gap-2">
+          <button id="openReceiptScannerBtn" type="button" class="px-3.5 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-200 border border-purple-500/30 text-xs font-semibold transition flex items-center gap-1.5">
+            <span>🧾</span>
+            <span>Сканер чека / СМС</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Smart Input Row -->
+      <div class="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        <!-- Voice Mic Button -->
+        <button id="voiceMicBtn" type="button" class="flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-semibold text-sm shadow-lg shadow-rose-500/20 transition shrink-0">
+          <svg id="micIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+          </svg>
+          <span id="voiceBtnText">Сказать голосом</span>
+          <div id="voiceWaveform" class="hidden items-center gap-0.5 h-5 ml-1">
+            <span class="w-1 bg-white rounded-full wave-bar-1"></span>
+            <span class="w-1 bg-white rounded-full wave-bar-2"></span>
+            <span class="w-1 bg-white rounded-full wave-bar-3"></span>
+            <span class="w-1 bg-white rounded-full wave-bar-4"></span>
+            <span class="w-1 bg-white rounded-full wave-bar-5"></span>
+          </div>
+        </button>
+
+        <!-- Smart Natural Language Input -->
+        <div class="relative flex-1">
+          <input id="smartPhraseInput" type="text" placeholder="Напишите или скажите категорию и сумму (например: Продукты 5000 или Зарплата 300000)..." class="w-full bg-gray-950/90 border border-gray-700/80 focus:border-indigo-500 rounded-2xl pl-4 pr-28 py-3.5 text-sm text-white placeholder-gray-500 focus:outline-none transition" />
+          <span id="smartLiveBadge" class="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium px-2 py-1 rounded-lg bg-gray-800 text-gray-400">
+            Авто-разбор
+          </span>
+        </div>
+
+        <!-- Submit Smart Input -->
+        <button id="smartAddBtn" type="button" class="px-5 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition shrink-0 flex items-center justify-center gap-2">
+          <span>Записать</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+        </button>
+
+        <!-- Toggle Manual Detailed Form -->
+        <button id="toggleManualFormBtn" type="button" class="px-4 py-3.5 rounded-2xl bg-gray-800 hover:bg-gray-700 text-gray-200 font-medium text-sm border border-gray-700 transition shrink-0">
+          Форма вручную
+        </button>
+      </div>
+
+      <!-- Real-time AI Parse Preview Bar -->
+      <div id="smartParsePreview" class="hidden mt-3 p-3 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-indigo-300 font-semibold">ИИ распознал:</span>
+          <span id="previewTypeBadge" class="px-2 py-0.5 rounded-md font-semibold">Расход</span>
+          <span id="previewCategoryBadge" class="px-2 py-0.5 rounded-md bg-gray-800 text-gray-200">🛒 Еда и продукты</span>
+          <span id="previewAmountBadge" class="px-2 py-0.5 rounded-md bg-white/10 text-white font-bold">0 ₸</span>
+          <span id="previewDateBadge" class="px-2 py-0.5 rounded-md bg-gray-800 text-gray-300">Сегодня</span>
+          <span id="previewTitleBadge" class="text-gray-300 italic"></span>
+        </div>
+        <div id="previewWorkHours" class="text-amber-300 font-medium"></div>
+      </div>
+
+      <!-- Detailed Manual Entry Form (Collapsible) -->
+      <form id="manualEntryForm" class="hidden mt-4 pt-4 border-t border-gray-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Тип операции</label>
+          <select id="manualType" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+            <option value="expense">📉 Расход</option>
+            <option value="income">📈 Доход</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Сумма</label>
+          <input id="manualAmount" type="number" step="any" min="1" placeholder="Введите сумму" required class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Категория</label>
+          <select id="manualCategory" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"></select>
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Дата</label>
+          <input id="manualDate" type="date" required class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Описание / Комментарий</label>
+          <input id="manualTitle" type="text" placeholder="Название или комментарий" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500" />
+        </div>
+        <div class="flex items-end">
+          <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition shadow">
+            Сохранить запись
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- KPI SUMMARY CARDS -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Total Balance -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Текущий баланс</span>
+          <span class="p-2 rounded-xl bg-indigo-500/15 text-indigo-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+            </svg>
+          </span>
+        </div>
+        <div class="mt-3">
+          <div id="kpiBalance" class="money-val text-2xl sm:text-3xl font-extrabold text-white">0 ₸</div>
+          <p id="kpiSavingsRate" class="text-xs text-emerald-400 mt-1">Норма сбережений: 0%</p>
+        </div>
+      </div>
+
+      <!-- Monthly Expenses -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span id="kpiExpenseMonthLabel" class="text-xs font-medium text-gray-400 uppercase tracking-wider">Расходы за месяц</span>
+          <span class="p-2 rounded-xl bg-rose-500/15 text-rose-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/>
+            </svg>
+          </span>
+        </div>
+        <div class="mt-3">
+          <div id="kpiExpenses" class="money-val text-2xl sm:text-3xl font-extrabold text-rose-400">0 ₸</div>
+          <p id="kpiExpenseWorkHours" class="text-xs text-gray-400 mt-1">≈ 0 часов вашей работы</p>
+        </div>
+      </div>
+
+      <!-- Monthly Income -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-gray-400 uppercase tracking-wider">Доходы за месяц</span>
+          <span class="p-2 rounded-xl bg-emerald-500/15 text-emerald-400">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+            </svg>
+          </span>
+        </div>
+        <div class="mt-3">
+          <div id="kpiIncome" class="money-val text-2xl sm:text-3xl font-extrabold text-emerald-400">0 ₸</div>
+          <p id="kpiTransactionsCount" class="text-xs text-gray-400 mt-1">Операций за месяц: 0</p>
+        </div>
+      </div>
+
+      <!-- Safe Daily Limit -->
+      <div class="glass-card rounded-2xl p-4 sm:p-5 flex flex-col justify-between border border-amber-500/20">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-amber-300 uppercase tracking-wider">Можно потратить сегодня</span>
+          <span id="finHealthPill" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
+            FinHealth: 100/100
+          </span>
+        </div>
+        <div class="mt-3">
+          <div id="kpiSafeDaily" class="money-val text-2xl sm:text-3xl font-extrabold text-amber-300">0 ₸</div>
+          <div class="w-full bg-gray-800 h-1.5 rounded-full mt-2 overflow-hidden">
+            <div id="budgetProgressBar" class="bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 h-full rounded-full" style="width: 0%"></div>
+          </div>
+          <p id="kpiBudgetStatus" class="text-[11px] text-gray-400 mt-1">Потрачено 0% от месячного лимита</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TAB 1: DASHBOARD (КОШЕЛЁК) ================= -->
+    <div id="tabContentDashboard" class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left 2 Cols: Transactions Feed -->
+        <div class="lg:col-span-2 glass-card rounded-3xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-800">
+              <div>
+                <h2 class="text-lg font-bold text-white">Лента ваших операций</h2>
+                <p class="text-xs text-gray-400">История ваших доходов и расходов с ИИ-метками</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <input id="searchTxInput" type="text" placeholder="Поиск по описанию..." class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500" />
+                <select id="filterTypeSelect" class="bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-gray-200">
+                  <option value="all">Все типы</option>
+                  <option value="expense">Только расходы</option>
+                  <option value="income">Только доходы</option>
+                </select>
+                <select id="filterCategorySelect" class="bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-1.5 text-xs text-gray-200">
+                  <option value="all">Все категории</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Transaction List -->
+            <div id="transactionsList" class="mt-4 space-y-2.5 max-h-[540px] overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+
+        <!-- Right Col: Mini Calendar Preview & Top Categories -->
+        <div class="space-y-6">
+          <!-- Mini Calendar Card -->
+          <div class="glass-card rounded-3xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-base font-bold text-white">Траты по дням</h3>
+                <p class="text-xs text-gray-400">Быстрый переход к календарю</p>
+              </div>
+              <button id="goToFullCalendarBtn" type="button" class="text-xs font-semibold text-indigo-400 hover:text-indigo-300">
+                Весь календарь →
+              </button>
+            </div>
+            <div id="miniCalendarStrip" class="grid grid-cols-7 gap-1.5 text-center"></div>
+          </div>
+
+          <!-- Category Breakdown Progress -->
+          <div class="glass-card rounded-3xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-base font-bold text-white">Куда уходят деньги</h3>
+              <span id="topCategoriesMonthLabel" class="text-xs text-gray-400">За месяц</span>
+            </div>
+            <div id="dashboardCategoriesList" class="space-y-3"></div>
+          </div>
+
+          <!-- Smart AI Observation Card -->
+          <div class="glass-card rounded-3xl p-5 border border-indigo-500/30 bg-gradient-to-br from-indigo-950/40 to-gray-900/90">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-lg">✨</span>
+              <h3 class="text-sm font-bold text-indigo-200 uppercase tracking-wider">Финансовый советник Revius</h3>
+            </div>
+            <p id="dashboardAiInsight" class="text-xs sm:text-sm text-gray-300 leading-relaxed"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= TAB 2: CALENDAR (КАЛЕНДАРЬ ТРАТ ПО ДНЯМ) ================= -->
+    <div id="tabContentCalendar" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Calendar Grid -->
+        <div class="lg:col-span-2 glass-card rounded-3xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <div>
+              <h2 class="text-xl font-bold text-white">Календарь расходов и доходов</h2>
+              <p class="text-xs text-gray-400">Смотрите сколько потрачено и заработано в каждый конкретный день</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button id="calPrevMonthBtn" type="button" class="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+              </button>
+              <span id="calMonthTitle" class="text-sm sm:text-base font-bold text-white min-w-[140px] text-center">Ноябрь 2026</span>
+              <button id="calNextMonthBtn" type="button" class="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              </button>
+              <button id="calTodayBtn" type="button" class="px-3 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-semibold">
+                Сегодня
+              </button>
+            </div>
+          </div>
+
+          <!-- Heatmap Legend -->
+          <div class="flex flex-wrap items-center gap-4 mb-4 text-xs text-gray-400">
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500/40"></span> В пределах дневной нормы</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-500/20 border border-amber-500/40"></span> Около дневного лимита</span>
+            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-rose-500/25 border border-rose-500/50"></span> Выше дневного лимита</span>
+          </div>
+
+          <!-- Weekday Headers -->
+          <div class="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-gray-400 mb-2">
+            <div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div class="text-rose-400">Сб</div><div class="text-rose-400">Вс</div>
+          </div>
+
+          <!-- Calendar Days Grid -->
+          <div id="calendarGrid" class="grid grid-cols-7 gap-2"></div>
+        </div>
+
+        <!-- Selected Day Details Sidebar -->
+        <div class="glass-card rounded-3xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+              <div>
+                <span class="text-xs text-indigo-400 font-semibold uppercase">Выбранный день</span>
+                <h3 id="selectedDayTitle" class="text-lg font-bold text-white">2 ноября 2026</h3>
+              </div>
+              <button id="addTxForSelectedDayBtn" type="button" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">
+                + Записать на этот день
+              </button>
+            </div>
+
+            <!-- Selected Day Summary -->
+            <div class="grid grid-cols-2 gap-3 my-4">
+              <div class="glass-sub rounded-2xl p-3">
+                <span class="text-[11px] text-gray-400">Потрачено за день</span>
+                <div id="selectedDayExpense" class="money-val text-lg font-bold text-rose-400 mt-0.5">0 ₸</div>
+              </div>
+              <div class="glass-sub rounded-2xl p-3">
+                <span class="text-[11px] text-gray-400">Получено за день</span>
+                <div id="selectedDayIncome" class="money-val text-lg font-bold text-emerald-400 mt-0.5">0 ₸</div>
+              </div>
+            </div>
+
+            <!-- Selected Day Transactions -->
+            <div id="selectedDayTxList" class="space-y-2.5 max-h-[420px] overflow-y-auto pr-1"></div>
+          </div>
+
+          <div id="selectedDayFooterTip" class="mt-4 pt-3 border-t border-gray-800 text-xs text-gray-400"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= TAB 3: ANALYTICS & CHARTS (ГРАФИКИ И ИИ) ================= -->
+    <div id="tabContentAnalytics" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Daily Expense & Income Bar Chart -->
+        <div class="glass-card rounded-3xl p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-base sm:text-lg font-bold text-white">Динамика расходов и доходов по дням</h3>
+              <p class="text-xs text-gray-400">График строится автоматически по вашим записям</p>
+            </div>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="dailyChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Category Doughnut Chart -->
+        <div class="glass-card rounded-3xl p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-base sm:text-lg font-bold text-white">Структура расходов по категориям</h3>
+              <p class="text-xs text-gray-400">Распределение ваших трат за выбранный месяц</p>
+            </div>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="categoryChartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 50/30/20 Rule & Work-Hour Worth Calculator -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- AI Insights + 50/30/20 Breakdown -->
+        <div class="lg:col-span-2 glass-card rounded-3xl p-5 space-y-5">
+          <div>
+            <h3 class="text-lg font-bold text-white mb-3">Аналитика ваших финансовых привычек</h3>
+            <div id="analyticsInsightsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+          </div>
+
+          <!-- Cool New Feature: 50/30/20 Rule Analyzer -->
+          <div class="pt-4 border-t border-gray-800">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-bold text-indigo-300">📊 Баланс по правилу 50 / 30 / 20</h4>
+              <span class="text-xs text-gray-400">Нужды (50%) • Желания (30%) • Сбережения (20%)</span>
+            </div>
+            <div id="rule503020Box" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+          </div>
+        </div>
+
+        <!-- "Is It Worth It?" Work-Hours Calculator -->
+        <div class="glass-card rounded-3xl p-5 border border-purple-500/30">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-xl">⏱️</span>
+            <h3 class="text-base font-bold text-white">Калькулятор «Стоит ли покупка?»</h3>
+          </div>
+          <p class="text-xs text-gray-400 mb-4">
+            Введите название и цену любой желаемой вещи, чтобы узнать, сколько часов работы она стоит.
+          </p>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Название покупки</label>
+              <input id="worthItemInput" type="text" placeholder="Что хотите купить?" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Цена покупки</label>
+              <input id="worthPriceInput" type="number" min="1" placeholder="Введите цену" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white" />
+            </div>
+            <div id="worthResultBox" class="p-3.5 rounded-2xl bg-purple-950/40 border border-purple-500/30 text-xs space-y-1"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= TAB 4: GOALS, DEBTS & CUSTOM CATEGORIES ================= -->
+    <div id="tabContentGoals" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Savings Goals (Копилки) -->
+        <div class="glass-card rounded-3xl p-5 space-y-4">
+          <div>
+            <h3 class="text-lg font-bold text-white">🎯 Ваши копилки и финансовые цели</h3>
+            <p class="text-xs text-gray-400">Создавайте цели и отслеживайте прогресс накоплений</p>
+          </div>
+
+          <div id="savingsGoalsList" class="space-y-3"></div>
+
+          <!-- Add New Goal Form -->
+          <form id="addGoalForm" class="pt-4 border-t border-gray-800 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <input id="newGoalName" type="text" placeholder="Название цели" required class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+            <input id="newGoalTarget" type="number" min="1" placeholder="Целевая сумма" required class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+            <button type="submit" class="py-2 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">
+              + Создать копилку
+            </button>
+          </form>
+        </div>
+
+        <!-- Cool Feature: Debts & Loans Tracker (Долги) -->
+        <div class="glass-card rounded-3xl p-5 space-y-4">
+          <div>
+            <h3 class="text-lg font-bold text-white">🤝 Учёт долгов («Мне должны» / «Я должен»)</h3>
+            <p class="text-xs text-gray-400">Каждый платёж уменьшает остаток долга и автоматически отражается в балансе</p>
+          </div>
+
+          <div id="debtsList" class="space-y-3"></div>
+
+          <form id="addDebtForm" class="pt-4 border-t border-gray-800 grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            <select id="newDebtType" class="bg-gray-900 border border-gray-700 rounded-xl px-2.5 py-2 text-xs text-white">
+              <option value="owed_to_me">Мне должны</option>
+              <option value="i_owe">Я должен</option>
+            </select>
+            <input id="newDebtPerson" type="text" placeholder="Имя человека" required class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+            <input id="newDebtAmount" type="number" min="1" placeholder="Сумма долга" required class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+            <button type="submit" class="py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition">
+              + Записать долг
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Custom Categories & Data Management -->
+      <div class="glass-card rounded-3xl p-5 space-y-4">
+        <div>
+          <h3 class="text-lg font-bold text-white">🏷️ Категории и экспорт данных</h3>
+          <p class="text-xs text-gray-400">Добавляйте собственные категории для голосового и ручного распознавания</p>
+        </div>
+
+        <div id="customCategoriesBadges" class="flex flex-wrap gap-2"></div>
+
+        <form id="addCategoryForm" class="pt-4 border-t border-gray-800 grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+          <input id="newCatIcon" type="text" placeholder="Эмодзи (🐾)" maxlength="4" required class="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+          <input id="newCatName" type="text" placeholder="Название новой категории" required class="sm:col-span-2 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white" />
+          <button type="submit" class="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition">
+            + Добавить
+          </button>
+        </form>
+
+        <!-- Data Management -->
+        <div class="pt-4 border-t border-gray-800 flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs text-gray-400">Управление данными вашего аккаунта:</span>
+          <div class="flex items-center gap-2">
+            <button id="exportCsvBtn" type="button" class="px-3 py-1.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-xs text-gray-200 border border-gray-700">
+              📥 Скачать CSV
+            </button>
+            <button id="resetDemoDataBtn" type="button" class="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-xs text-rose-300 border border-rose-500/30">
+              🗑️ Очистить все записи
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= RECEIPT / BANK SMS SCANNER MODAL ================= -->
+  <div id="receiptModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 p-4">
+    <div class="glass-card rounded-3xl max-w-lg w-full p-6 space-y-4 border border-purple-500/30">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-xl">🧾</span>
+          <h3 class="text-lg font-bold text-white">ИИ-Сканер чеков и банковских СМС</h3>
+        </div>
+        <button id="closeReceiptModalBtn" type="button" class="text-gray-400 hover:text-white text-sm">✕</button>
+      </div>
+      <p class="text-xs text-gray-400">
+        Вставьте текст уведомления от банка (Kaspi, Halyk, Freedom, Сбер, Т-Банк) или загрузите фото чека — система сама извлечёт сумму, магазин и категорию.
+      </p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Фото чека (необязательно)</label>
+          <input id="receiptImageInput" type="file" accept="image/*" class="w-full text-xs text-gray-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-purple-600/25 file:text-purple-200 hover:file:bg-purple-600/40" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Текст из чека или банковского уведомления</label>
+          <textarea id="receiptTextInput" rows="3" placeholder="Вставьте текст СМС или чека (например: Покупка: 6400 KZT, АЗС Гелиос)..." class="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500"></textarea>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button id="parseReceiptBtn" type="button" class="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition">
+          Распознать и добавить
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SETTINGS MODAL ================= -->
+  <div id="settingsModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 p-4">
+    <div class="glass-card rounded-3xl max-w-md w-full p-6 space-y-4 border border-gray-700">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-white">Настройки профиля и бюджета</h3>
+        <button id="closeSettingsModalBtn" type="button" class="text-gray-400 hover:text-white text-sm">✕</button>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Месячный лимит расходов</label>
+          <input id="settingMonthlyBudget" type="number" min="0" placeholder="Введите лимит на месяц" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white" />
+        </div>
+        <div>
+          <label class="block text-xs text-gray-400 mb-1">Стоимость 1 часа вашей работы</label>
+          <input id="settingHourlyRate" type="number" min="0" placeholder="Введите вашу ставку в час" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white" />
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button id="saveSettingsBtn" type="button" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold">
+          Сохранить
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ================== STORAGE & MULTI-USER AUTHENTICATION ==================
+    const USERS_STORAGE_KEY = 'revius_prod_users_v2';
+    const SESSION_STORAGE_KEY = 'revius_prod_active_user_v2';
+
+    const DEFAULT_CATEGORIES = [
+      { id: 'food', name: 'Еда и продукты', icon: '🛒', type: 'expense', bucket: 'needs', color: '#f43f5e', keywords: ['продукт', 'супермаркет', 'магнум', 'magnum', 'хлеб', 'молоко', 'мясо', 'овощ', 'фрукт', 'еда', 'магазин', 'пятерочка', 'перекресток', 'small', 'гастроном'] },
+      { id: 'cafe', name: 'Кафе и кофе', icon: '☕', type: 'expense', bucket: 'wants', color: '#f97316', keywords: ['кофе', 'кафе', 'ресторан', 'обед', 'ужин', 'завтрак', 'латте', 'капучино', 'круассан', 'бургер', 'пицц', 'суши', 'доставка', 'десерт', 'чай'] },
+      { id: 'transport', name: 'Транспорт и такси', icon: '🚕', type: 'expense', bucket: 'needs', color: '#eab308', keywords: ['такси', 'яндекс', 'убер', 'автобус', 'метро', 'бензин', 'заправка', 'азс', 'гелиос', 'парковка', 'проезд', 'самокат'] },
+      { id: 'home', name: 'Жильё и ЖКХ', icon: '🏠', type: 'expense', bucket: 'needs', color: '#06b6d4', keywords: ['аренда', 'квартира', 'жкх', 'коммунал', 'свет', 'вода', 'интернет', 'дом', 'ремонт'] },
+      { id: 'subs', name: 'Подписки и связь', icon: '📱', type: 'expense', bucket: 'wants', color: '#8b5cf6', keywords: ['подписка', 'связь', 'телефон', 'тариф', 'музыка', 'кино', 'netflix', 'spotify', 'youtube', 'icloud', 'telegram', 'связь'] },
+      { id: 'shopping', name: 'Покупки и одежда', icon: '🛍️', type: 'expense', bucket: 'wants', color: '#ec4899', keywords: ['одежда', 'обувь', 'куртка', 'кроссовки', 'маркетплейс', 'kaspi', 'ozon', 'wb', 'wildberries', 'покупка', 'косметика', 'техника'] },
+      { id: 'health', name: 'Здоровье и спорт', icon: '💊', type: 'expense', bucket: 'needs', color: '#14b8a6', keywords: ['аптека', 'лекарств', 'врач', 'клиника', 'спорт', 'зал', 'фитнес', 'тренировка', 'витамин', 'стоматолог'] },
+      { id: 'fun', name: 'Развлечения', icon: '🎬', type: 'expense', bucket: 'wants', color: '#3b82f6', keywords: ['кинотеатр', 'билет', 'концерт', 'игры', 'отдых', 'боулинг', 'парк', 'книга'] },
+      { id: 'salary', name: 'Зарплата', icon: '💼', type: 'income', bucket: 'income', color: '#10b981', keywords: ['зарплата', 'аванс', 'оклад', 'зп', 'премия', 'выплата'] },
+      { id: 'freelance', name: 'Фриланс и бизнес', icon: '💻', type: 'income', bucket: 'income', color: '#34d399', keywords: ['фриланс', 'проект', 'заказ', 'клиент', 'консультация', 'услуга', 'доход', 'прибыль'] },
+      { id: 'gift', name: 'Подарки и кэшбэк', icon: '🎁', type: 'income', bucket: 'income', color: '#6ee7b7', keywords: ['кэшбэк', 'бонус', 'вернули', 'подарили', 'дивиденд', 'процент', 'долг'] }
+    ];
+
+    function getTodayISO() {
+      const now = new Date();
+      return formatDateISO(now);
+    }
+
+    function formatDateISO(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    // Completely clean initial user state — zero pre-populated transactions, goals, or debts
+    function createCleanUserState(profile) {
+      const now = new Date();
+      return {
+        user: {
+          name: profile.name || 'Пользователь',
+          email: profile.email || 'user@revius.app',
+          password: profile.password || ''
+        },
+        currency: profile.currency || '₸',
+        monthlyBudget: Number(profile.monthlyBudget) >= 0 ? Number(profile.monthlyBudget) : 0,
+        hourlyRate: Number(profile.hourlyRate) >= 0 ? Number(profile.hourlyRate) : 0,
+        selectedMonthYear: { year: now.getFullYear(), month: now.getMonth() },
+        selectedDate: formatDateISO(now),
+        privacyMode: false,
+        categories: JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)),
+        goals: [],
+        debts: [],
+        transactions: []
+      };
+    }
+
+    // Multi-layer storage helper so accounts persist even in restricted webviews/iframes
+    function readPersistentItem(key) {
+      try {
+        const val = localStorage.getItem(key);
+        if (val) return val;
+      } catch (e) {}
+      try {
+        const val = sessionStorage.getItem(key);
+        if (val) return val;
+      } catch (e) {}
+      try {
+        if (window.name && window.name.startsWith('REVIUS_STORE:')) {
+          const store = JSON.parse(window.name.slice('REVIUS_STORE:'.length));
+          if (store && store[key]) return store[key];
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function writePersistentItem(key, value) {
+      try {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+      } catch (e) {}
+      try {
+        if (value === null) sessionStorage.removeItem(key);
+        else sessionStorage.setItem(key, value);
+      } catch (e) {}
+      try {
+        let store = {};
+        if (window.name && window.name.startsWith('REVIUS_STORE:')) {
+          store = JSON.parse(window.name.slice('REVIUS_STORE:'.length)) || {};
+        }
+        if (value === null) delete store[key];
+        else store[key] = value;
+        window.name = 'REVIUS_STORE:' + JSON.stringify(store);
+      } catch (e) {}
+    }
+
+    let usersDB = loadUsersDB();
+    let currentUserKey = loadActiveSession();
+    let state = getCurrentUserState();
+    let dailyChartInstance = null;
+    let categoryChartInstance = null;
+    let recognition = null;
+    let isRecording = false;
+
+    function loadUsersDB() {
+      try {
+        const raw = readPersistentItem(USERS_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') return parsed;
+        }
+      } catch (e) {}
+      return {};
+    }
+
+    function saveUsersDB() {
+      try {
+        writePersistentItem(USERS_STORAGE_KEY, JSON.stringify(usersDB));
+      } catch (e) {}
+    }
+
+    function loadActiveSession() {
+      return readPersistentItem(SESSION_STORAGE_KEY) || null;
+    }
+
+    function setActiveSession(emailKey) {
+      currentUserKey = emailKey;
+      writePersistentItem(SESSION_STORAGE_KEY, emailKey ? emailKey : null);
+    }
+
+    function normalizeIdentity(str) {
+      return (str || '').trim().toLowerCase();
+    }
+
+    // Find an existing account by either email/login OR user name
+    function findAccountKey(identifier) {
+      const norm = normalizeIdentity(identifier);
+      if (!norm) return null;
+      usersDB = loadUsersDB();
+      if (usersDB[norm]) return norm;
+      for (const [key, acc] of Object.entries(usersDB)) {
+        if (!acc || !acc.user) continue;
+        if (normalizeIdentity(acc.user.email) === norm || normalizeIdentity(acc.user.name) === norm) {
+          return key;
+        }
+      }
+      return null;
+    }
+
+    function getCurrentUserState() {
+      usersDB = loadUsersDB();
+      if (currentUserKey && usersDB[currentUserKey]) {
+        return usersDB[currentUserKey];
+      }
+      return createCleanUserState({ name: 'Гость', email: '' });
+    }
+
+    function saveState() {
+      if (currentUserKey) {
+        usersDB[currentUserKey] = state;
+        saveUsersDB();
+      }
+    }
+
+    function renderSavedAccountsPicker() {
+      usersDB = loadUsersDB();
+      const container = document.getElementById('savedAccountsContainer');
+      const list = document.getElementById('savedAccountsList');
+      if (!container || !list) return;
+      const entries = Object.entries(usersDB).filter(([_, acc]) => acc && acc.user);
+      if (entries.length === 0) {
+        container.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+      }
+      container.classList.remove('hidden');
+      list.innerHTML = entries.map(([key, acc]) => `
+        <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-gray-900/90 border border-gray-800 hover:border-indigo-500/50 transition">
+          <button type="button" data-pick-account="${acc.user.email}" class="flex-1 text-left flex items-center gap-2 min-w-0">
+            <span class="w-7 h-7 rounded-lg bg-indigo-600/25 border border-indigo-500/30 flex items-center justify-center text-xs font-bold text-indigo-300 shrink-0">
+              ${(acc.user.name || 'U').charAt(0).toUpperCase()}
+            </span>
+            <div class="min-w-0">
+              <div class="text-xs font-bold text-white truncate">${acc.user.name}</div>
+              <div class="text-[11px] text-gray-400 truncate">${acc.user.email}</div>
+            </div>
+          </button>
+          <span class="text-[10px] text-indigo-400 font-semibold px-2 py-0.5 rounded bg-indigo-500/10">Выбрать →</span>
+        </div>
+      `).join('');
+    }
+
+    function showInlineAuthFeedback(boxId, message, isError = true) {
+      const box = document.getElementById(boxId);
+      if (!box) return;
+      if (!message) {
+        box.classList.add('hidden');
+        return;
+      }
+      box.classList.remove('hidden');
+      box.className = isError
+        ? 'p-3 rounded-xl text-xs font-medium border bg-rose-950/80 border-rose-500/40 text-rose-200'
+        : 'p-3 rounded-xl text-xs font-medium border bg-emerald-950/80 border-emerald-500/40 text-emerald-200';
+      box.textContent = message;
+    }
+
+    function updateAuthVisibility() {
+      const overlay = document.getElementById('authOverlay');
+      usersDB = loadUsersDB();
+      if (currentUserKey && usersDB[currentUserKey]) {
+        overlay.classList.add('hidden');
+        document.getElementById('userProfileBadge').textContent = `👤 ${state.user.name}`;
+      } else {
+        overlay.classList.remove('hidden');
+        renderSavedAccountsPicker();
+      }
+    }
+
+    function formatMoney(num) {
+      const n = Math.round(Number(num) || 0);
+      return n.toLocaleString('ru-RU') + ' ' + state.currency;
+    }
+
+    function getCategoryById(catId) {
+      return state.categories.find(c => c.id === catId) || state.categories[0];
+    }
+
+    function showToast(message, tone = 'indigo') {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      const bgClass = tone === 'emerald'
+        ? 'bg-emerald-950/95 border-emerald-500/40 text-emerald-200'
+        : tone === 'rose'
+        ? 'bg-rose-950/95 border-rose-500/40 text-rose-200'
+        : 'bg-indigo-950/95 border-indigo-500/40 text-indigo-100';
+      el.className = `px-4 py-3 rounded-2xl border shadow-xl text-xs sm:text-sm font-medium transition-all duration-300 ${bgClass}`;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+      }, 3200);
+    }
+
+    // ================== NATURAL LANGUAGE & VOICE PARSER ==================
+    const WORD_NUMBERS = {
+      'сто': 100, 'двести': 200, 'триста': 300, 'четыреста': 400, 'пятьсот': 500,
+      'шестьсот': 600, 'семьсот': 700, 'восемьсот': 800, 'девятьсот': 900,
+      'тысяча': 1000, 'тысячи': 1000, 'тысяч': 1000, 'тыс': 1000,
+      'полторы': 1500, 'две': 2, 'три': 3, 'четыре': 4, 'пять': 5,
+      'шесть': 6, 'семь': 7, 'восемь': 8, 'девять': 9, 'десять': 10,
+      'пятнадцать': 15, 'двадцать': 20, 'тридцать': 30, 'сорок': 40, 'пятьдесят': 50
+    };
+
+    function parseSmartPhrase(rawText) {
+      const text = (rawText || '').trim();
+      if (!text) return null;
+      const lower = text.toLowerCase();
+
+      // 1. Extract date
+      let targetDate = state.selectedDate || getTodayISO();
+      const baseRef = new Date();
+      if (lower.includes('позавчера')) {
+        const d = new Date(baseRef);
+        d.setDate(d.getDate() - 2);
+        targetDate = formatDateISO(d);
+      } else if (lower.includes('вчера')) {
+        const d = new Date(baseRef);
+        d.setDate(d.getDate() - 1);
+        targetDate = formatDateISO(d);
+      } else if (lower.includes('сегодня')) {
+        targetDate = formatDateISO(baseRef);
+      }
+
+      // 2. Extract amount
+      let amount = 0;
+      const kMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(?:к|k|тыс|тысяч)/i);
+      if (kMatch) {
+        amount = Math.round(parseFloat(kMatch[1].replace(',', '.')) * 1000);
+      } else {
+        const digitsMatch = lower.replace(/(\d)\s+(?=\d{3})/g, '$1').match(/(\d+(?:[.,]\d+)?)/);
+        if (digitsMatch) {
+          amount = Math.round(parseFloat(digitsMatch[1].replace(',', '.')));
+        } else {
+          let wordSum = 0;
+          const words = lower.split(/\s+/);
+          for (let i = 0; i < words.length; i++) {
+            const w = words[i];
+            if (WORD_NUMBERS[w]) {
+              if ((w === 'тысяча' || w === 'тысячи' || w === 'тысяч') && wordSum > 0 && wordSum < 100) {
+                wordSum = wordSum * 1000;
+              } else {
+                wordSum += WORD_NUMBERS[w];
+              }
+            }
+          }
+          amount = wordSum;
+        }
+      }
+
+      // 3. Detect category and type
+      let matchedCategory = null;
+      for (const cat of state.categories) {
+        if (lower.includes(cat.name.toLowerCase())) {
+          matchedCategory = cat;
+          break;
+        }
+        if (cat.keywords && cat.keywords.some(kw => lower.includes(kw))) {
+          matchedCategory = cat;
+          break;
+        }
+      }
+
+      let type = 'expense';
+      if (matchedCategory) {
+        type = matchedCategory.type;
+      } else if (lower.includes('доход') || lower.includes('плюс') || lower.includes('получил') || lower.includes('зарплат') || lower.includes('пришло')) {
+        type = 'income';
+        matchedCategory = getCategoryById('salary');
+      } else {
+        matchedCategory = getCategoryById('food');
+      }
+
+      // 4. Clean title
+      let cleanedTitle = text
+        .replace(/(\d+(?:[.,]\d+)?)\s*(?:к|k|тыс|тысяч)?/gi, '')
+        .replace(/\b(сегодня|вчера|позавчера|тенге|рублей|долларов|евро|kzt|rub|usd|потратил|купил|покупка|на|за|в)\b/gi, ' ')
+        .replace(/[.,:;!?\-—]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!cleanedTitle || cleanedTitle.length < 2) {
+        cleanedTitle = matchedCategory.name;
+      } else {
+        cleanedTitle = cleanedTitle.charAt(0).toUpperCase() + cleanedTitle.slice(1);
+      }
+
+      return {
+        type,
+        amount: amount > 0 ? amount : 0,
+        categoryId: matchedCategory.id,
+        category: matchedCategory,
+        date: targetDate,
+        title: cleanedTitle
+      };
+    }
+
+    function updateSmartPreview() {
+      const inputVal = document.getElementById('smartPhraseInput').value;
+      const previewBox = document.getElementById('smartParsePreview');
+      const parsed = parseSmartPhrase(inputVal);
+
+      if (!parsed) {
+        previewBox.classList.add('hidden');
+        return;
+      }
+      previewBox.classList.remove('hidden');
+
+      const typeBadge = document.getElementById('previewTypeBadge');
+      if (parsed.type === 'income') {
+        typeBadge.textContent = '📈 Доход';
+        typeBadge.className = 'px-2 py-0.5 rounded-md font-semibold bg-emerald-500/20 text-emerald-300';
+      } else {
+        typeBadge.textContent = '📉 Расход';
+        typeBadge.className = 'px-2 py-0.5 rounded-md font-semibold bg-rose-500/20 text-rose-300';
+      }
+
+      document.getElementById('previewCategoryBadge').textContent = `${parsed.category.icon} ${parsed.category.name}`;
+      document.getElementById('previewAmountBadge').textContent = parsed.amount > 0 ? formatMoney(parsed.amount) : 'Укажите сумму';
+      document.getElementById('previewDateBadge').textContent = `📅 ${parsed.date}`;
+      document.getElementById('previewTitleBadge').textContent = `«${parsed.title}»`;
+
+      const hoursEl = document.getElementById('previewWorkHours');
+      if (parsed.type === 'expense' && parsed.amount > 0 && state.hourlyRate > 0) {
+        const hrs = (parsed.amount / state.hourlyRate).toFixed(1);
+        hoursEl.textContent = `⏱️ ≈ ${hrs} ч. вашей работы`;
+      } else {
+        hoursEl.textContent = '';
+      }
+    }
+
+    function handleSmartAdd(sourceType = 'smart') {
+      const inputEl = document.getElementById('smartPhraseInput');
+      const parsed = parseSmartPhrase(inputEl.value);
+      if (!parsed || parsed.amount <= 0) {
+        showToast('Укажите название и сумму (например: Продукты 4500)', 'rose');
+        inputEl.focus();
+        return;
+      }
+
+      const newTx = {
+        id: 'tx_' + Date.now(),
+        type: parsed.type,
+        amount: parsed.amount,
+        categoryId: parsed.categoryId,
+        title: parsed.title,
+        date: parsed.date,
+        source: sourceType
+      };
+
+      state.transactions.unshift(newTx);
+      saveState();
+      inputEl.value = '';
+      updateSmartPreview();
+      renderAll();
+
+      const sign = newTx.type === 'income' ? '+' : '-';
+      showToast(`Записано: ${parsed.category.icon} ${newTx.title} (${sign}${formatMoney(newTx.amount)})`, 'emerald');
+    }
+
+    // ================== REAL WEB SPEECH API (VOICE INPUT) ==================
+    function initSpeechRecognition() {
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const badge = document.getElementById('voiceSupportBadge');
+      if (!SpeechRec) {
+        badge.textContent = 'Голосовой ввод (зависит от браузера)';
+        return;
+      }
+
+      recognition = new SpeechRec();
+      recognition.lang = 'ru-RU';
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        isRecording = true;
+        updateVoiceButtonUI(true);
+        showToast('Говорите: назовите покупку и сумму...', 'indigo');
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        const inputEl = document.getElementById('smartPhraseInput');
+        inputEl.value = transcript;
+        updateSmartPreview();
+
+        if (event.results[event.results.length - 1].isFinal) {
+          setTimeout(() => {
+            const parsed = parseSmartPhrase(inputEl.value);
+            if (parsed && parsed.amount > 0) {
+              handleSmartAdd('voice');
+            }
+          }, 400);
+        }
+      };
+
+      recognition.onerror = () => {
+        isRecording = false;
+        updateVoiceButtonUI(false);
+        showToast('Разрешите доступ к микрофону в браузере или введите фразу в поле рядом', 'rose');
+        document.getElementById('smartPhraseInput').focus();
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+        updateVoiceButtonUI(false);
+      };
+    }
+
+    function updateVoiceButtonUI(recording) {
+      const btn = document.getElementById('voiceMicBtn');
+      const text = document.getElementById('voiceBtnText');
+      const wave = document.getElementById('voiceWaveform');
+      if (recording) {
+        btn.classList.add('recording-pulse');
+        text.textContent = 'Слушаю...';
+        wave.classList.remove('hidden');
+        wave.classList.add('flex');
+      } else {
+        btn.classList.remove('recording-pulse');
+        text.textContent = 'Сказать голосом';
+        wave.classList.add('hidden');
+        wave.classList.remove('flex');
+      }
+    }
+
+    // ================== RENDER & METRICS LOGIC ==================
+    function getMonthTransactions(year, month) {
+      return state.transactions.filter(t => {
+        const parts = t.date.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        return y === year && m === month;
+      });
+    }
+
+    function calculateStreakDays() {
+      const uniqueDates = new Set(state.transactions.map(t => t.date));
+      return uniqueDates.size;
+    }
+
+    function renderKPIs() {
+      const { year, month } = state.selectedMonthYear;
+      const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+      document.getElementById('kpiExpenseMonthLabel').textContent = `Расходы (${monthNames[month]})`;
+      document.getElementById('topCategoriesMonthLabel').textContent = `${monthNames[month]} ${year}`;
+      document.getElementById('streakBadge').textContent = `🔥 Активных дней: ${calculateStreakDays()}`;
+
+      const allIncome = state.transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+      const allExpense = state.transactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+      const totalBalance = allIncome - allExpense;
+
+      const monthTxs = getMonthTransactions(year, month);
+      const monthIncome = monthTxs.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+      const monthExpense = monthTxs.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+
+      document.getElementById('kpiBalance').textContent = formatMoney(totalBalance);
+      document.getElementById('kpiExpenses').textContent = formatMoney(monthExpense);
+      document.getElementById('kpiIncome').textContent = formatMoney(monthIncome);
+      document.getElementById('kpiTransactionsCount').textContent = `Операций за месяц: ${monthTxs.length}`;
+
+      const workHours = state.hourlyRate > 0 ? (monthExpense / state.hourlyRate).toFixed(1) : 0;
+      document.getElementById('kpiExpenseWorkHours').textContent = state.hourlyRate > 0
+        ? `⏱️ ≈ ${workHours} ч. вашей работы`
+        : `Укажите стоимость часа в настройках ⚙️`;
+
+      const savingsRate = monthIncome > 0 ? Math.max(0, Math.round(((monthIncome - monthExpense) / monthIncome) * 100)) : 0;
+      document.getElementById('kpiSavingsRate').textContent = `Норма сбережений: ${savingsRate}%`;
+
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const now = new Date();
+      const currentDay = (year === now.getFullYear() && month === now.getMonth()) ? now.getDate() : 1;
+      const remainingDays = Math.max(1, daysInMonth - currentDay + 1);
+
+      if (state.monthlyBudget > 0) {
+        const remainingBudget = Math.max(0, state.monthlyBudget - monthExpense);
+        const safeDaily = Math.round(remainingBudget / remainingDays);
+        document.getElementById('kpiSafeDaily').textContent = formatMoney(safeDaily);
+
+        const usedPct = Math.min(100, Math.round((monthExpense / state.monthlyBudget) * 100));
+        document.getElementById('budgetProgressBar').style.width = `${usedPct}%`;
+        document.getElementById('kpiBudgetStatus').textContent = `Потрачено ${usedPct}% из лимита ${formatMoney(state.monthlyBudget)}`;
+
+        const finScore = Math.max(15, Math.min(100, 100 - Math.round(usedPct * 0.5) + Math.round(savingsRate * 0.25)));
+        document.getElementById('finHealthPill').textContent = `FinHealth: ${finScore}/100`;
+      } else {
+        document.getElementById('kpiSafeDaily').textContent = formatMoney(0);
+        document.getElementById('budgetProgressBar').style.width = '0%';
+        document.getElementById('kpiBudgetStatus').textContent = 'Нажмите ⚙️ вверху, чтобы задать месячный лимит';
+        document.getElementById('finHealthPill').textContent = 'FinHealth: 100/100';
+      }
+    }
+
+    function applyPrivacyMode() {
+      document.querySelectorAll('.money-val').forEach(el => {
+        el.classList.toggle('privacy-blur', !!state.privacyMode);
+      });
+    }
+
+    function populateCategorySelects() {
+      const manualType = document.getElementById('manualType').value;
+      const manualCatSelect = document.getElementById('manualCategory');
+      const filteredCats = state.categories.filter(c => c.type === manualType);
+
+      manualCatSelect.innerHTML = filteredCats.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+
+      const filterSelect = document.getElementById('filterCategorySelect');
+      const currentFilter = filterSelect.value || 'all';
+      filterSelect.innerHTML = `<option value="all">Все категории</option>` +
+        state.categories.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+      filterSelect.value = currentFilter;
+    }
+
+    function getAiTagForTransaction(tx) {
+      if (tx.type === 'income') {
+        return { label: 'Поступление', color: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' };
+      }
+      if (tx.categoryId === 'subs') {
+        return { label: '🔄 Подписка', color: 'bg-purple-500/15 text-purple-300 border-purple-500/30' };
+      }
+      if (state.hourlyRate > 0) {
+        const workHrs = (tx.amount / state.hourlyRate).toFixed(1);
+        return { label: `⏱️ ${workHrs} ч. труда`, color: 'bg-gray-800 text-gray-300 border-gray-700' };
+      }
+      return { label: 'Расход', color: 'bg-gray-800 text-gray-400 border-gray-700' };
+    }
+
+    function renderTransactionsList() {
+      const searchQ = document.getElementById('searchTxInput').value.trim().toLowerCase();
+      const typeFilter = document.getElementById('filterTypeSelect').value;
+      const catFilter = document.getElementById('filterCategorySelect').value;
+
+      const filtered = state.transactions.filter(tx => {
+        if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
+        if (catFilter !== 'all' && tx.categoryId !== catFilter) return false;
+        if (searchQ && !tx.title.toLowerCase().includes(searchQ)) return false;
+        return true;
+      }).sort((a, b) => b.date.localeCompare(a.date));
+
+      const container = document.getElementById('transactionsList');
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 px-4 rounded-2xl border border-dashed border-gray-800 text-gray-400 space-y-2">
+            <div class="text-2xl">✨</div>
+            <div class="font-semibold text-white text-sm">Ваш журнал операций чист</div>
+            <p class="text-xs text-gray-500 max-w-md mx-auto">
+              Добавьте свою первую реальную запись голосом, через строку ИИ-ввода, форму вручную или сканер чека/СМС.
+            </p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(tx => {
+        const cat = getCategoryById(tx.categoryId);
+        const aiTag = getAiTagForTransaction(tx);
+        const isInc = tx.type === 'income';
+        const amountStr = (isInc ? '+' : '-') + formatMoney(tx.amount);
+        const amountColor = isInc ? 'text-emerald-400' : 'text-rose-400';
+        const voiceBadge = tx.source === 'voice'
+          ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">🎙️ Голос</span>`
+          : tx.source === 'receipt'
+          ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">🧾 Чек/СМС</span>`
+          : '';
+
+        return `
+          <div class="glass-sub rounded-2xl p-3.5 flex items-center justify-between gap-3 hover:border-gray-600 transition">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shrink-0" style="background: ${cat.color}22; border: 1px solid ${cat.color}44">
+                ${cat.icon}
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-semibold text-sm text-white truncate">${tx.title}</span>
+                  ${voiceBadge}
+                  <span class="text-[11px] px-2 py-0.5 rounded-full border ${aiTag.color}">${aiTag.label}</span>
+                </div>
+                <div class="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+                  <span>${cat.name}</span>
+                  <span>•</span>
+                  <span>📅 ${tx.date}</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <span class="money-val font-bold text-sm sm:text-base ${amountColor}">${amountStr}</span>
+              <button type="button" data-delete-tx="${tx.id}" class="p-1.5 rounded-lg hover:bg-rose-500/20 text-gray-500 hover:text-rose-400 transition" title="Удалить запись">
+                ✕
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderDashboardSidebar() {
+      const { year, month } = state.selectedMonthYear;
+      const monthTxs = getMonthTransactions(year, month).filter(t => t.type === 'expense');
+      const totalExp = monthTxs.reduce((s, t) => s + t.amount, 0) || 1;
+
+      const byCat = {};
+      monthTxs.forEach(t => {
+        byCat[t.categoryId] = (byCat[t.categoryId] || 0) + t.amount;
+      });
+
+      const sortedCats = Object.entries(byCat)
+        .map(([catId, sum]) => ({ cat: getCategoryById(catId), sum, pct: Math.round((sum / totalExp) * 100) }))
+        .sort((a, b) => b.sum - a.sum);
+
+      const catContainer = document.getElementById('dashboardCategoriesList');
+      if (sortedCats.length === 0) {
+        catContainer.innerHTML = `<p class="text-xs text-gray-500">Запишите расходы, чтобы увидеть распределение по категориям.</p>`;
+      } else {
+        catContainer.innerHTML = sortedCats.slice(0, 5).map(item => `
+          <div class="space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-medium text-gray-200">${item.cat.icon} ${item.cat.name}</span>
+              <span class="money-val text-gray-300 font-semibold">${formatMoney(item.sum)} <span class="text-gray-500">(${item.pct}%)</span></span>
+            </div>
+            <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+              <div class="h-full rounded-full" style="width: ${item.pct}%; background-color: ${item.cat.color}"></div>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Mini 7-day strip around selectedDate
+      const stripEl = document.getElementById('miniCalendarStrip');
+      const refDate = new Date(state.selectedDate + 'T00:00:00');
+      const dayLabels = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      let stripHTML = '';
+      for (let offset = -5; offset <= 1; offset++) {
+        const d = new Date(refDate);
+        d.setDate(d.getDate() + offset);
+        const iso = formatDateISO(d);
+        const dayExp = state.transactions
+          .filter(t => t.date === iso && t.type === 'expense')
+          .reduce((s, t) => s + t.amount, 0);
+        const isSel = iso === state.selectedDate;
+        stripHTML += `
+          <button type="button" data-select-date="${iso}" class="p-2 rounded-2xl border transition flex flex-col items-center ${isSel ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-gray-900/80 border-gray-800 text-gray-300 hover:border-gray-600'}">
+            <span class="text-[10px] opacity-75">${dayLabels[d.getDay()]}</span>
+            <span class="text-xs font-bold my-0.5">${d.getDate()}</span>
+            <span class="money-val text-[10px] font-semibold ${dayExp > 0 ? (isSel ? 'text-rose-200' : 'text-rose-400') : 'text-gray-500'}">
+              ${dayExp > 0 ? (dayExp >= 1000 ? Math.round(dayExp / 1000) + 'к' : dayExp) : '0'}
+            </span>
+          </button>
+        `;
+      }
+      stripEl.innerHTML = stripHTML;
+
+      const insightEl = document.getElementById('dashboardAiInsight');
+      if (sortedCats.length > 0) {
+        const top = sortedCats[0];
+        const hrsText = state.hourlyRate > 0 ? ` (${(top.sum / state.hourlyRate).toFixed(1)} ч. работы)` : '';
+        insightEl.innerHTML = `Главная статья расходов в этом месяце — <strong>«${top.cat.name}»</strong>: <strong>${formatMoney(top.sum)}</strong> (${top.pct}% всех трат${hrsText}). Сокращение этой категории на 10% сохранит вам <strong>${formatMoney(top.sum * 0.1)}</strong>.`;
+      } else {
+        insightEl.textContent = 'Как только вы начнёте вести учёт расходов и доходов, здесь появятся персональные выводы о ваших тратах.';
+      }
+    }
+
+    // ================== FULL CALENDAR VIEW ==================
+    function renderCalendar() {
+      const { year, month } = state.selectedMonthYear;
+      const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+      document.getElementById('calMonthTitle').textContent = `${monthNames[month]} ${year}`;
+
+      const firstDayOfMonth = new Date(year, month, 1);
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const startWeekday = (firstDayOfMonth.getDay() + 6) % 7;
+
+      const dailyBudgetTarget = state.monthlyBudget > 0 ? (state.monthlyBudget / daysInMonth) : 10000;
+      const grid = document.getElementById('calendarGrid');
+      let cellsHTML = '';
+
+      for (let i = 0; i < startWeekday; i++) {
+        cellsHTML += `<div class="h-20 sm:h-24 rounded-2xl bg-gray-900/30 border border-gray-800/40"></div>`;
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayTxs = state.transactions.filter(t => t.date === iso);
+        const dayExp = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+        const dayInc = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+        const isSelected = iso === state.selectedDate;
+
+        let heatClass = 'bg-gray-900/70 border-gray-800 hover:border-gray-600';
+        if (dayExp > 0 && dayExp <= dailyBudgetTarget * 0.85) {
+          heatClass = 'bg-emerald-950/35 border-emerald-500/30 hover:border-emerald-400';
+        } else if (dayExp > dailyBudgetTarget * 0.85 && dayExp <= dailyBudgetTarget * 1.4) {
+          heatClass = 'bg-amber-950/35 border-amber-500/35 hover:border-amber-400';
+        } else if (dayExp > dailyBudgetTarget * 1.4) {
+          heatClass = 'bg-rose-950/45 border-rose-500/45 hover:border-rose-400';
+        }
+
+        const selectedRing = isSelected ? 'ring-2 ring-indigo-400 border-indigo-400' : '';
+
+        cellsHTML += `
+          <button type="button" data-cal-date="${iso}" class="h-20 sm:h-24 p-2 rounded-2xl border text-left flex flex-col justify-between transition ${heatClass} ${selectedRing}">
+            <div class="flex items-center justify-between w-full">
+              <span class="text-xs sm:text-sm font-bold ${isSelected ? 'text-indigo-300' : 'text-gray-200'}">${day}</span>
+              ${dayTxs.length > 0 ? `<span class="text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-gray-300">${dayTxs.length}</span>` : ''}
+            </div>
+            <div class="space-y-0.5 w-full overflow-hidden">
+              ${dayExp > 0 ? `<div class="money-val text-[10px] sm:text-xs font-bold text-rose-400 truncate">-${dayExp.toLocaleString('ru-RU')} ${state.currency}</div>` : `<div class="text-[10px] text-gray-600">0 ${state.currency}</div>`}
+              ${dayInc > 0 ? `<div class="money-val text-[10px] font-semibold text-emerald-400 truncate">+${dayInc.toLocaleString('ru-RU')} ${state.currency}</div>` : ''}
+            </div>
+          </button>
+        `;
+      }
+
+      grid.innerHTML = cellsHTML;
+      renderSelectedDayDetails();
+    }
+
+    function renderSelectedDayDetails() {
+      const iso = state.selectedDate;
+      const dObj = new Date(iso + 'T00:00:00');
+      const formattedDate = dObj.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+      document.getElementById('selectedDayTitle').textContent = formattedDate;
+
+      const dayTxs = state.transactions.filter(t => t.date === iso);
+      const dayExp = dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+      const dayInc = dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+
+      document.getElementById('selectedDayExpense').textContent = formatMoney(dayExp);
+      document.getElementById('selectedDayIncome').textContent = formatMoney(dayInc);
+
+      const listEl = document.getElementById('selectedDayTxList');
+      if (dayTxs.length === 0) {
+        listEl.innerHTML = `<div class="text-center py-8 text-xs text-gray-500">За ${formattedDate} операций пока нет.</div>`;
+      } else {
+        listEl.innerHTML = dayTxs.map(tx => {
+          const cat = getCategoryById(tx.categoryId);
+          const isInc = tx.type === 'income';
+          return `
+            <div class="glass-sub rounded-xl p-3 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="text-lg">${cat.icon}</span>
+                <div class="min-w-0">
+                  <div class="text-xs font-semibold text-white truncate">${tx.title}</div>
+                  <div class="text-[11px] text-gray-400">${cat.name}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="money-val text-xs font-bold ${isInc ? 'text-emerald-400' : 'text-rose-400'}">${isInc ? '+' : '-'}${formatMoney(tx.amount)}</span>
+                <button type="button" data-delete-tx="${tx.id}" class="text-gray-500 hover:text-rose-400 text-xs">✕</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      const workHrs = state.hourlyRate > 0 ? (dayExp / state.hourlyRate).toFixed(1) : 0;
+      document.getElementById('selectedDayFooterTip').textContent =
+        dayExp > 0 && state.hourlyRate > 0
+          ? `⏱️ Траты за ${formattedDate} равны ${workHrs} ч. вашей работы.`
+          : `Нажмите «+ Записать на этот день», чтобы добавить расход или доход на ${formattedDate}.`;
+    }
+
+    // ================== CHARTS & ANALYTICS ==================
+    function renderChartsAndAnalytics() {
+      const { year, month } = state.selectedMonthYear;
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const labels = [];
+      const dailyExpData = [];
+      const dailyIncData = [];
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        labels.push(String(d));
+        const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dayTxs = state.transactions.filter(t => t.date === iso);
+        dailyExpData.push(dayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0));
+        dailyIncData.push(dayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0));
+      }
+
+      const dailyCtx = document.getElementById('dailyChartCanvas').getContext('2d');
+      if (dailyChartInstance) dailyChartInstance.destroy();
+      dailyChartInstance = new Chart(dailyCtx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: `Расходы (${state.currency})`,
+              data: dailyExpData,
+              backgroundColor: 'rgba(244, 63, 94, 0.75)',
+              borderRadius: 6
+            },
+            {
+              label: `Доходы (${state.currency})`,
+              data: dailyIncData,
+              backgroundColor: 'rgba(16, 185, 129, 0.75)',
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#d1d5db', font: { family: 'Inter', size: 11 } } }
+          },
+          scales: {
+            x: { ticks: { color: '#9ca3af', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+            y: { ticks: { color: '#9ca3af', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.06)' } }
+          }
+        }
+      });
+
+      const monthTxs = getMonthTransactions(year, month);
+      const monthExpTxs = monthTxs.filter(t => t.type === 'expense');
+      const monthIncTxs = monthTxs.filter(t => t.type === 'income');
+
+      const byCat = {};
+      monthExpTxs.forEach(t => {
+        byCat[t.categoryId] = (byCat[t.categoryId] || 0) + t.amount;
+      });
+
+      const catEntries = Object.entries(byCat).map(([id, sum]) => ({ cat: getCategoryById(id), sum }));
+      const catCtx = document.getElementById('categoryChartCanvas').getContext('2d');
+      if (categoryChartInstance) categoryChartInstance.destroy();
+
+      categoryChartInstance = new Chart(catCtx, {
+        type: 'doughnut',
+        data: {
+          labels: catEntries.length ? catEntries.map(e => `${e.cat.icon} ${e.cat.name}`) : ['Нет расходов'],
+          datasets: [{
+            data: catEntries.length ? catEntries.map(e => e.sum) : [1],
+            backgroundColor: catEntries.length ? catEntries.map(e => e.cat.color) : ['#1f2937'],
+            borderWidth: 2,
+            borderColor: '#111827'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'right', labels: { color: '#e5e7eb', font: { family: 'Inter', size: 11 } } }
+          }
+        }
+      });
+
+      const totalExp = monthExpTxs.reduce((s, t) => s + t.amount, 0);
+      const totalInc = monthIncTxs.reduce((s, t) => s + t.amount, 0);
+      const voiceCount = state.transactions.filter(t => t.source === 'voice').length;
+      const maxTx = monthExpTxs.slice().sort((a, b) => b.amount - a.amount)[0];
+
+      document.getElementById('analyticsInsightsGrid').innerHTML = `
+        <div class="glass-sub rounded-2xl p-4 space-y-1">
+          <div class="text-xs text-indigo-400 font-semibold">🎙️ Голосовой учёт</div>
+          <div class="text-base font-bold text-white">${voiceCount} записей голосом</div>
+          <p class="text-xs text-gray-400">Все продиктованные операции автоматически распределены по категориям.</p>
+        </div>
+        <div class="glass-sub rounded-2xl p-4 space-y-1">
+          <div class="text-xs text-rose-400 font-semibold">🔥 Самая крупная трата месяца</div>
+          <div class="text-base font-bold text-white">${maxTx ? maxTx.title : 'Пока нет расходов'}</div>
+          <p class="text-xs text-gray-400">${maxTx ? formatMoney(maxTx.amount) + ' (' + maxTx.date + ')' : 'Добавьте первую запись для анализа.'}</p>
+        </div>
+        <div class="glass-sub rounded-2xl p-4 space-y-1">
+          <div class="text-xs text-amber-400 font-semibold">⏱️ Затраты в часах работы</div>
+          <div class="text-base font-bold text-white">${state.hourlyRate > 0 ? (totalExp / state.hourlyRate).toFixed(1) + ' ч.' : 'Не задана ставка'}</div>
+          <p class="text-xs text-gray-400">Общее количество часов вашего труда, ушедшее на оплату расходов месяца.</p>
+        </div>
+        <div class="glass-sub rounded-2xl p-4 space-y-1">
+          <div class="text-xs text-emerald-400 font-semibold">📊 Средний чек расхода</div>
+          <div class="text-base font-bold text-white">${monthExpTxs.length > 0 ? formatMoney(totalExp / monthExpTxs.length) : formatMoney(0)}</div>
+          <p class="text-xs text-gray-400">Средняя сумма одной расходной операции в выбранном месяце.</p>
+        </div>
+      `;
+
+      // 50/30/20 Rule Calculation
+      const needsSum = monthExpTxs.filter(t => getCategoryById(t.categoryId).bucket === 'needs').reduce((s, t) => s + t.amount, 0);
+      const wantsSum = monthExpTxs.filter(t => getCategoryById(t.categoryId).bucket !== 'needs').reduce((s, t) => s + t.amount, 0);
+      const savedSum = Math.max(0, totalInc - totalExp);
+      const baseTotal = Math.max(1, totalInc > 0 ? totalInc : totalExp);
+
+      document.getElementById('rule503020Box').innerHTML = `
+        <div class="glass-sub rounded-2xl p-3.5">
+          <div class="text-xs text-cyan-300 font-semibold">🏠 Базовые нужды (норма ~50%)</div>
+          <div class="money-val text-base font-bold text-white mt-1">${formatMoney(needsSum)}</div>
+          <div class="text-[11px] text-gray-400">${totalExp > 0 || totalInc > 0 ? Math.round((needsSum / baseTotal) * 100) : 0}% от бюджета</div>
+        </div>
+        <div class="glass-sub rounded-2xl p-3.5">
+          <div class="text-xs text-pink-300 font-semibold">☕ Желания и досуг (норма ~30%)</div>
+          <div class="money-val text-base font-bold text-white mt-1">${formatMoney(wantsSum)}</div>
+          <div class="text-[11px] text-gray-400">${totalExp > 0 || totalInc > 0 ? Math.round((wantsSum / baseTotal) * 100) : 0}% от бюджета</div>
+        </div>
+        <div class="glass-sub rounded-2xl p-3.5">
+          <div class="text-xs text-emerald-300 font-semibold">🛡️ Свободный остаток (норма ~20%)</div>
+          <div class="money-val text-base font-bold text-white mt-1">${formatMoney(savedSum)}</div>
+          <div class="text-[11px] text-gray-400">${totalInc > 0 ? Math.round((savedSum / totalInc) * 100) : 0}% сохранено</div>
+        </div>
+      `;
+
+      updateWorthCalculator();
+    }
+
+    function updateWorthCalculator() {
+      const item = document.getElementById('worthItemInput').value.trim();
+      const price = parseFloat(document.getElementById('worthPriceInput').value) || 0;
+      const box = document.getElementById('worthResultBox');
+
+      if (!price || price <= 0) {
+        box.innerHTML = `<div class="text-gray-400">Введите цену покупки выше, чтобы рассчитать её стоимость в часах вашей работы.</div>`;
+        return;
+      }
+
+      if (!state.hourlyRate || state.hourlyRate <= 0) {
+        box.innerHTML = `<div class="text-amber-300">Откройте настройки ⚙️ в правом верхнем углу и укажите стоимость 1 часа вашей работы.</div>`;
+        return;
+      }
+
+      const hours = (price / state.hourlyRate).toFixed(1);
+      const workDays = (price / (state.hourlyRate * 8)).toFixed(1);
+      box.innerHTML = `
+        <div class="font-bold text-purple-200 text-sm">${item ? '«' + item + '»' : 'Покупка'} за ${formatMoney(price)}</div>
+        <div class="text-gray-300">Стоит <strong>${hours} часов</strong> вашего труда (или <strong>${workDays} рабочих дней</strong> по 8 часов).</div>
+      `;
+    }
+
+    // ================== GOALS, DEBTS & CUSTOM CATEGORIES ==================
+    function renderGoalsAndCategories() {
+      const goalsEl = document.getElementById('savingsGoalsList');
+      if (state.goals.length === 0) {
+        goalsEl.innerHTML = `<div class="text-xs text-gray-500 py-4 text-center border border-dashed border-gray-800 rounded-2xl">У вас пока нет созданных копилок. Добавьте первую цель ниже!</div>`;
+      } else {
+        goalsEl.innerHTML = state.goals.map(g => {
+          const pct = Math.min(100, Math.round((g.saved / Math.max(1, g.target)) * 100));
+          return `
+            <div class="glass-sub rounded-2xl p-4 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-sm text-white">${g.icon || '🎯'} ${g.name}</span>
+                <span class="money-val text-xs font-semibold text-indigo-300">${formatMoney(g.saved)} / ${formatMoney(g.target)} (${pct}%)</span>
+              </div>
+              <div class="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 rounded-full" style="width: ${pct}%"></div>
+              </div>
+              <div class="flex items-center justify-between pt-1">
+                <button type="button" data-topup-goal="${g.id}" class="text-xs px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 font-semibold transition">
+                  + Пополнить копилку
+                </button>
+                <button type="button" data-delete-goal="${g.id}" class="text-xs text-gray-500 hover:text-rose-400">Удалить</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Render Debts
+      const debtsEl = document.getElementById('debtsList');
+      if (!state.debts || state.debts.length === 0) {
+        debtsEl.innerHTML = `<div class="text-xs text-gray-500 py-4 text-center border border-dashed border-gray-800 rounded-2xl">Список долгов пуст.</div>`;
+      } else {
+        debtsEl.innerHTML = state.debts.map(d => {
+          const isOwedToMe = d.type === 'owed_to_me';
+          return `
+            <div class="glass-sub rounded-2xl p-3.5 flex items-center justify-between gap-2">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold px-2 py-0.5 rounded-md ${isOwedToMe ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}">
+                    ${isOwedToMe ? 'Мне должны' : 'Я должен'}
+                  </span>
+                  <span class="text-sm font-bold text-white">${d.person}</span>
+                </div>
+                <div class="money-val text-xs text-gray-300 mt-1">Остаток: <strong>${formatMoney(d.remaining)}</strong> (из ${formatMoney(d.total)})</div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" data-settle-debt="${d.id}" class="px-2.5 py-1.5 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-200 border border-indigo-500/30 text-xs font-semibold">
+                  ✓ Погасить
+                </button>
+                <button type="button" data-delete-debt="${d.id}" class="text-xs text-gray-500 hover:text-rose-400">✕</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      const badgesEl = document.getElementById('customCategoriesBadges');
+      badgesEl.innerHTML = state.categories.map(c => `
+        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-gray-900 border border-gray-700 text-gray-200">
+          <span>${c.icon}</span>
+          <span>${c.name}</span>
+          <span class="text-[10px] text-gray-500">(${c.type === 'income' ? 'доход' : 'расход'})</span>
+        </span>
+      `).join('');
+    }
+
+    function renderAll() {
+      updateAuthVisibility();
+      document.getElementById('currencySelect').value = state.currency;
+      populateCategorySelects();
+      renderKPIs();
+      renderTransactionsList();
+      renderDashboardSidebar();
+      renderCalendar();
+      renderGoalsAndCategories();
+      if (!document.getElementById('tabContentAnalytics').classList.contains('hidden')) {
+        renderChartsAndAnalytics();
+      }
+      applyPrivacyMode();
+    }
+
+    // ================== EVENT LISTENERS ==================
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('manualDate').value = state.selectedDate;
+      initSpeechRecognition();
+      renderAll();
+
+      // Auth Tab Switcher
+      const authTabReg = document.getElementById('authTabRegisterBtn');
+      const authTabLog = document.getElementById('authTabLoginBtn');
+      const regForm = document.getElementById('registerForm');
+      const logForm = document.getElementById('loginForm');
+
+      authTabReg.addEventListener('click', () => {
+        authTabReg.className = 'py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow';
+        authTabLog.className = 'py-2 rounded-xl text-xs sm:text-sm font-bold transition text-gray-400 hover:text-white';
+        regForm.classList.remove('hidden');
+        logForm.classList.add('hidden');
+        showInlineAuthFeedback('regFeedbackBox', '');
+      });
+
+      authTabLog.addEventListener('click', () => {
+        authTabLog.className = 'py-2 rounded-xl text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow';
+        authTabReg.className = 'py-2 rounded-xl text-xs sm:text-sm font-bold transition text-gray-400 hover:text-white';
+        logForm.classList.remove('hidden');
+        regForm.classList.add('hidden');
+        showInlineAuthFeedback('authFeedbackBox', '');
+        renderSavedAccountsPicker();
+      });
+
+      document.getElementById('toggleRegPassBtn').addEventListener('click', () => {
+        const passInput = document.getElementById('regPassword');
+        passInput.type = passInput.type === 'password' ? 'text' : 'password';
+      });
+
+      document.getElementById('toggleLoginPassBtn').addEventListener('click', () => {
+        const passInput = document.getElementById('loginPassword');
+        passInput.type = passInput.type === 'password' ? 'text' : 'password';
+      });
+
+      // Clicking a saved account in the Login picker pre-fills the login field
+      document.getElementById('savedAccountsList').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-pick-account]');
+        if (!btn) return;
+        const pickedEmail = btn.getAttribute('data-pick-account');
+        document.getElementById('loginEmail').value = pickedEmail;
+        document.getElementById('loginPassword').focus();
+        showInlineAuthFeedback('authFeedbackBox', `Выбран аккаунт «${pickedEmail}». Введите ваш пароль.`, false);
+      });
+
+      // Registration Submit (blocks duplicate email OR duplicate name!)
+      regForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        usersDB = loadUsersDB();
+        const name = document.getElementById('regName').value.trim();
+        const email = document.getElementById('regEmail').value.trim().toLowerCase();
+        const password = document.getElementById('regPassword').value.trim();
+        const currency = document.getElementById('regCurrency').value;
+        const monthlyBudget = parseFloat(document.getElementById('regBudget').value) || 0;
+        const hourlyRate = parseFloat(document.getElementById('regHourlyRate').value) || 0;
+
+        if (!name || !email || !password) return;
+
+        const existingByEmail = findAccountKey(email);
+        const existingByName = findAccountKey(name);
+        if (existingByEmail || existingByName) {
+          const matchedKey = existingByEmail || existingByName;
+          const matchedAcc = usersDB[matchedKey];
+          const msg = `Аккаунт «${matchedAcc.user.name}» (${matchedAcc.user.email}) уже зарегистрирован! Повторная регистрация запрещена — пожалуйста, введите пароль для входа.`;
+          showToast(msg, 'rose');
+          authTabLog.click();
+          document.getElementById('loginEmail').value = matchedAcc.user.email;
+          document.getElementById('loginPassword').value = '';
+          document.getElementById('loginPassword').focus();
+          showInlineAuthFeedback('authFeedbackBox', msg, true);
+          return;
+        }
+
+        const newUserState = createCleanUserState({ name, email, password, currency, monthlyBudget, hourlyRate });
+        usersDB[email] = newUserState;
+        saveUsersDB();
+        setActiveSession(email);
+        state = newUserState;
+        regForm.reset();
+        showInlineAuthFeedback('regFeedbackBox', '');
+        document.getElementById('manualDate').value = state.selectedDate;
+        renderAll();
+        showToast(`Добро пожаловать, ${name}! Аккаунт создан и сохранён.`, 'emerald');
+      });
+
+      // Login Submit (accepts EITHER email/login OR user name!)
+      logForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        usersDB = loadUsersDB();
+        const identifier = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value.trim();
+
+        const accountKey = findAccountKey(identifier);
+        if (!accountKey || !usersDB[accountKey]) {
+          const errMsg = `Аккаунт «${identifier}» не найден на этом устройстве. Проверьте правильность написания или создайте аккаунт во вкладке «Регистрация».`;
+          showInlineAuthFeedback('authFeedbackBox', errMsg, true);
+          showToast(errMsg, 'rose');
+          return;
+        }
+
+        const existing = usersDB[accountKey];
+        if ((existing.user.password || '').trim() !== password) {
+          const passErr = 'Неверный пароль от аккаунта. Проверьте пароль (нажмите 👁️, чтобы увидеть вводимые символы).';
+          showInlineAuthFeedback('authFeedbackBox', passErr, true);
+          showToast(passErr, 'rose');
+          return;
+        }
+
+        showInlineAuthFeedback('authFeedbackBox', '');
+        setActiveSession(accountKey);
+        state = existing;
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('manualDate').value = state.selectedDate;
+        renderAll();
+        showToast(`С возвращением, ${state.user.name}!`, 'emerald');
+      });
+
+      // Logout (saves current user state first, switches straight to Login tab, and pre-fills login)
+      document.getElementById('logoutBtn').addEventListener('click', () => {
+        const lastEmail = state && state.user ? state.user.email : '';
+        saveState();
+        setActiveSession(null);
+        updateAuthVisibility();
+        authTabLog.click();
+        if (lastEmail) {
+          document.getElementById('loginEmail').value = lastEmail;
+          document.getElementById('loginPassword').value = '';
+        }
+        showInlineAuthFeedback('authFeedbackBox', 'Вы вышли из аккаунта. Введите пароль, чтобы войти снова.', false);
+        showToast('Вы вышли из аккаунта. Все ваши данные сохранены.', 'indigo');
+      });
+
+      // Privacy Blur Mode Toggle
+      document.getElementById('privacyToggleBtn').addEventListener('click', () => {
+        state.privacyMode = !state.privacyMode;
+        saveState();
+        applyPrivacyMode();
+        showToast(state.privacyMode ? 'Суммы скрыты (режим приватности)' : 'Суммы снова видны', 'indigo');
+      });
+
+      // Navigation tabs
+      document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const target = btn.getAttribute('data-tab');
+          document.querySelectorAll('.nav-tab-btn').forEach(b => {
+            b.className = 'nav-tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all text-gray-400 hover:text-white';
+          });
+          btn.className = 'nav-tab-btn px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-indigo-600 text-white shadow';
+
+          document.getElementById('tabContentDashboard').classList.toggle('hidden', target !== 'dashboard');
+          document.getElementById('tabContentCalendar').classList.toggle('hidden', target !== 'calendar');
+          document.getElementById('tabContentAnalytics').classList.toggle('hidden', target !== 'analytics');
+          document.getElementById('tabContentGoals').classList.toggle('hidden', target !== 'goals');
+
+          if (target === 'analytics') {
+            renderChartsAndAnalytics();
+          }
+          applyPrivacyMode();
+        });
+      });
+
+      document.getElementById('goToFullCalendarBtn').addEventListener('click', () => {
+        document.getElementById('navTabCalendar').click();
+      });
+
+      // Smart Phrase Input
+      const smartInput = document.getElementById('smartPhraseInput');
+      smartInput.addEventListener('input', updateSmartPreview);
+      smartInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleSmartAdd('smart');
+        }
+      });
+
+      document.getElementById('smartAddBtn').addEventListener('click', () => handleSmartAdd('smart'));
+
+      // Voice Button
+      document.getElementById('voiceMicBtn').addEventListener('click', () => {
+        if (recognition) {
+          if (isRecording) {
+            recognition.stop();
+          } else {
+            try {
+              recognition.start();
+            } catch (e) {
+              showToast('Не удалось запустить микрофон. Проверьте разрешения браузера.', 'rose');
+            }
+          }
+        } else {
+          showToast('Ваш браузер ограничивает прямой доступ к микрофону во фрейме — введите фразу в поле рядом', 'indigo');
+          smartInput.focus();
+        }
+      });
+
+      // Receipt / Bank SMS Scanner Modal
+      const receiptModal = document.getElementById('receiptModal');
+      document.getElementById('openReceiptScannerBtn').addEventListener('click', () => {
+        receiptModal.classList.remove('hidden');
+        receiptModal.classList.add('flex');
+      });
+      document.getElementById('closeReceiptModalBtn').addEventListener('click', () => {
+        receiptModal.classList.add('hidden');
+        receiptModal.classList.remove('flex');
+      });
+      document.getElementById('receiptImageInput').addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) {
+          const cleanName = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ');
+          const textInput = document.getElementById('receiptTextInput');
+          if (!textInput.value.trim()) {
+            textInput.value = `Чек ${cleanName} `;
+          }
+          showToast('Фото чека прикреплено. Проверьте или дополните сумму в поле ниже.', 'indigo');
+        }
+      });
+      document.getElementById('parseReceiptBtn').addEventListener('click', () => {
+        const raw = document.getElementById('receiptTextInput').value.trim();
+        const parsed = parseSmartPhrase(raw);
+        if (!parsed || parsed.amount <= 0) {
+          showToast('Укажите в тексте чека или СМС сумму операции', 'rose');
+          return;
+        }
+        state.transactions.unshift({
+          id: 'tx_' + Date.now(),
+          type: parsed.type,
+          amount: parsed.amount,
+          categoryId: parsed.categoryId,
+          title: parsed.title,
+          date: parsed.date,
+          source: 'receipt'
+        });
+        saveState();
+        document.getElementById('receiptTextInput').value = '';
+        document.getElementById('receiptImageInput').value = '';
+        receiptModal.classList.add('hidden');
+        receiptModal.classList.remove('flex');
+        renderAll();
+        showToast(`Чек распознан и добавлен: ${parsed.category.icon} ${parsed.title} (${formatMoney(parsed.amount)})`, 'emerald');
+      });
+
+      // Toggle Manual Form
+      document.getElementById('toggleManualFormBtn').addEventListener('click', () => {
+        const form = document.getElementById('manualEntryForm');
+        form.classList.toggle('hidden');
+      });
+
+      document.getElementById('manualType').addEventListener('change', populateCategorySelects);
+
+      document.getElementById('manualEntryForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const type = document.getElementById('manualType').value;
+        const amount = parseFloat(document.getElementById('manualAmount').value);
+        const categoryId = document.getElementById('manualCategory').value;
+        const date = document.getElementById('manualDate').value || getTodayISO();
+        const cat = getCategoryById(categoryId);
+        const title = document.getElementById('manualTitle').value.trim() || cat.name;
+
+        if (!amount || amount <= 0) return;
+
+        state.transactions.unshift({
+          id: 'tx_' + Date.now(),
+          type,
+          amount: Math.round(amount),
+          categoryId,
+          title,
+          date,
+          source: 'manual'
+        });
+        saveState();
+        document.getElementById('manualAmount').value = '';
+        document.getElementById('manualTitle').value = '';
+        renderAll();
+        showToast(`Сохранено: ${cat.icon} ${title} (${formatMoney(amount)})`, 'emerald');
+      });
+
+      // Filters
+      document.getElementById('searchTxInput').addEventListener('input', renderTransactionsList);
+      document.getElementById('filterTypeSelect').addEventListener('change', renderTransactionsList);
+      document.getElementById('filterCategorySelect').addEventListener('change', renderTransactionsList);
+
+      // Currency Change
+      document.getElementById('currencySelect').addEventListener('change', (e) => {
+        state.currency = e.target.value;
+        saveState();
+        renderAll();
+      });
+
+      // Delegated clicks for transactions, dates, goals, debts
+      document.body.addEventListener('click', (e) => {
+        const delTxBtn = e.target.closest('[data-delete-tx]');
+        if (delTxBtn) {
+          const id = delTxBtn.getAttribute('data-delete-tx');
+          state.transactions = state.transactions.filter(t => t.id !== id);
+          saveState();
+          renderAll();
+          showToast('Запись удалена', 'rose');
+          return;
+        }
+
+        const selDateBtn = e.target.closest('[data-select-date]');
+        if (selDateBtn) {
+          state.selectedDate = selDateBtn.getAttribute('data-select-date');
+          document.getElementById('manualDate').value = state.selectedDate;
+          saveState();
+          renderAll();
+          document.getElementById('navTabCalendar').click();
+          return;
+        }
+
+        const calDateBtn = e.target.closest('[data-cal-date]');
+        if (calDateBtn) {
+          state.selectedDate = calDateBtn.getAttribute('data-cal-date');
+          document.getElementById('manualDate').value = state.selectedDate;
+          saveState();
+          renderCalendar();
+          renderDashboardSidebar();
+          applyPrivacyMode();
+          return;
+        }
+
+        const topupBtn = e.target.closest('[data-topup-goal]');
+        if (topupBtn) {
+          const gid = topupBtn.getAttribute('data-topup-goal');
+          const goal = state.goals.find(g => g.id === gid);
+          if (goal) {
+            const step = Math.max(1000, Math.round(goal.target * 0.1));
+            goal.saved += step;
+            saveState();
+            renderGoalsAndCategories();
+            applyPrivacyMode();
+            showToast(`Копилка «${goal.name}» пополнена на ${formatMoney(step)}`, 'emerald');
+          }
+          return;
+        }
+
+        const delGoalBtn = e.target.closest('[data-delete-goal]');
+        if (delGoalBtn) {
+          const gid = delGoalBtn.getAttribute('data-delete-goal');
+          state.goals = state.goals.filter(g => g.id !== gid);
+          saveState();
+          renderGoalsAndCategories();
+          return;
+        }
+
+        const settleDebtBtn = e.target.closest('[data-settle-debt]');
+        if (settleDebtBtn) {
+          const did = settleDebtBtn.getAttribute('data-settle-debt');
+          const debt = (state.debts || []).find(d => d.id === did);
+          if (debt && debt.remaining > 0) {
+            const isOwedToMe = debt.type === 'owed_to_me';
+            state.transactions.unshift({
+              id: 'tx_' + Date.now(),
+              type: isOwedToMe ? 'income' : 'expense',
+              amount: debt.remaining,
+              categoryId: isOwedToMe ? 'gift' : 'shopping',
+              title: isOwedToMe ? `Возврат долга от ${debt.person}` : `Погашение долга (${debt.person})`,
+              date: state.selectedDate || getTodayISO(),
+              source: 'manual'
+            });
+            state.debts = state.debts.filter(d => d.id !== did);
+            saveState();
+            renderAll();
+            showToast(`Долг (${debt.person}) погашен и учтён в балансе`, 'emerald');
+          }
+          return;
+        }
+
+        const delDebtBtn = e.target.closest('[data-delete-debt]');
+        if (delDebtBtn) {
+          const did = delDebtBtn.getAttribute('data-delete-debt');
+          state.debts = (state.debts || []).filter(d => d.id !== did);
+          saveState();
+          renderGoalsAndCategories();
+          return;
+        }
+      });
+
+      // Calendar Navigation
+      document.getElementById('calPrevMonthBtn').addEventListener('click', () => {
+        let { year, month } = state.selectedMonthYear;
+        month--;
+        if (month < 0) { month = 11; year--; }
+        state.selectedMonthYear = { year, month };
+        saveState();
+        renderAll();
+      });
+
+      document.getElementById('calNextMonthBtn').addEventListener('click', () => {
+        let { year, month } = state.selectedMonthYear;
+        month++;
+        if (month > 11) { month = 0; year++; }
+        state.selectedMonthYear = { year, month };
+        saveState();
+        renderAll();
+      });
+
+      document.getElementById('calTodayBtn').addEventListener('click', () => {
+        const now = new Date();
+        state.selectedMonthYear = { year: now.getFullYear(), month: now.getMonth() };
+        state.selectedDate = formatDateISO(now);
+        document.getElementById('manualDate').value = state.selectedDate;
+        saveState();
+        renderAll();
+      });
+
+      document.getElementById('addTxForSelectedDayBtn').addEventListener('click', () => {
+        const form = document.getElementById('manualEntryForm');
+        form.classList.remove('hidden');
+        document.getElementById('manualDate').value = state.selectedDate;
+        document.getElementById('manualAmount').focus();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        showToast(`Форма открыта на дату ${state.selectedDate}`, 'indigo');
+      });
+
+      // Worth Calculator Inputs
+      document.getElementById('worthItemInput').addEventListener('input', updateWorthCalculator);
+      document.getElementById('worthPriceInput').addEventListener('input', updateWorthCalculator);
+
+      // Goals Form
+      document.getElementById('addGoalForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const name = document.getElementById('newGoalName').value.trim();
+        const target = parseFloat(document.getElementById('newGoalTarget').value);
+        if (!name || !target) return;
+        state.goals.push({ id: 'g_' + Date.now(), name, saved: 0, target: Math.round(target), icon: '🎯' });
+        saveState();
+        document.getElementById('newGoalName').value = '';
+        document.getElementById('newGoalTarget').value = '';
+        renderGoalsAndCategories();
+        showToast(`Копилка «${name}» создана`, 'emerald');
+      });
+
+      // Debts Form
+      document.getElementById('addDebtForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const type = document.getElementById('newDebtType').value;
+        const person = document.getElementById('newDebtPerson').value.trim();
+        const amount = parseFloat(document.getElementById('newDebtAmount').value);
+        if (!person || !amount || amount <= 0) return;
+        if (!state.debts) state.debts = [];
+        state.debts.push({
+          id: 'd_' + Date.now(),
+          type,
+          person,
+          total: Math.round(amount),
+          remaining: Math.round(amount)
+        });
+        saveState();
+        document.getElementById('newDebtPerson').value = '';
+        document.getElementById('newDebtAmount').value = '';
+        renderGoalsAndCategories();
+        showToast(`Запись о долге (${person}) добавлена`, 'emerald');
+      });
+
+      // Add Category Form
+      document.getElementById('addCategoryForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const icon = document.getElementById('newCatIcon').value.trim() || '🏷️';
+        const name = document.getElementById('newCatName').value.trim();
+        if (!name) return;
+        state.categories.push({
+          id: 'cat_' + Date.now(),
+          name,
+          icon,
+          type: 'expense',
+          bucket: 'wants',
+          color: '#6366f1',
+          keywords: [name.toLowerCase()]
+        });
+        saveState();
+        document.getElementById('newCatIcon').value = '';
+        document.getElementById('newCatName').value = '';
+        renderAll();
+        showToast(`Категория «${icon} ${name}» добавлена`, 'emerald');
+      });
+
+      // Export CSV
+      document.getElementById('exportCsvBtn').addEventListener('click', () => {
+        if (state.transactions.length === 0) {
+          showToast('Нет записей для выгрузки в CSV', 'rose');
+          return;
+        }
+        const rows = [['Дата', 'Тип', 'Категория', 'Описание', 'Сумма', 'Валюта']];
+        state.transactions.forEach(t => {
+          const cat = getCategoryById(t.categoryId);
+          rows.push([t.date, t.type === 'income' ? 'Доход' : 'Расход', cat.name, `"${t.title}"`, t.amount, state.currency]);
+        });
+        const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + rows.map(r => r.join(',')).join('\n');
+        const link = document.createElement('a');
+        link.setAttribute('href', encodeURI(csvContent));
+        link.setAttribute('download', 'revius_transactions.csv');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        showToast('CSV-файл со всеми операциями скачан', 'emerald');
+      });
+
+      // Clear All Records
+      document.getElementById('resetDemoDataBtn').addEventListener('click', () => {
+        state.transactions = [];
+        state.goals = [];
+        state.debts = [];
+        saveState();
+        renderAll();
+        showToast('Все записи вашего аккаунта очищены', 'rose');
+      });
+
+      // Settings Modal
+      const settingsModal = document.getElementById('settingsModal');
+      document.getElementById('openSettingsBtn').addEventListener('click', () => {
+        document.getElementById('settingMonthlyBudget').value = state.monthlyBudget || '';
+        document.getElementById('settingHourlyRate').value = state.hourlyRate || '';
+        settingsModal.classList.remove('hidden');
+        settingsModal.classList.add('flex');
+      });
+
+      document.getElementById('closeSettingsModalBtn').addEventListener('click', () => {
+        settingsModal.classList.add('hidden');
+        settingsModal.classList.remove('flex');
+      });
+
+      document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+        const mb = parseFloat(document.getElementById('settingMonthlyBudget').value) || 0;
+        const hr = parseFloat(document.getElementById('settingHourlyRate').value) || 0;
+        state.monthlyBudget = Math.max(0, Math.round(mb));
+        state.hourlyRate = Math.max(0, Math.round(hr));
+        saveState();
+        settingsModal.classList.add('hidden');
+        settingsModal.classList.remove('flex');
+        renderAll();
+        showToast('Настройки сохранены', 'emerald');
+      });
+    });
+  </script>
+</body>
+</html>
